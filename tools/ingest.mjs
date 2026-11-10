@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Finds Feed Squeek level orders on IMD and prepares them for the game. Run by the game's operator, not by builders.
-//   node tools/ingest.mjs scan [--work <dir>] [--canvas <path>]   find finished orders, check them, write a report
+//   node tools/ingest.mjs scan [--work <dir>] [--canvas <path>]   find finished orders, check them, write a report;
+//                                                                  the last line counts results that are new since the last scan
 //   node tools/ingest.mjs add <job id>...                          list checked orders in levels/index.json
 //   node tools/ingest.mjs reject <job id> <reason>                 skip an order in later scans
 // An order is an IMD job that a player paid for and whose objective starts with "Feed Squeek level order" (agent.md).
@@ -131,8 +132,9 @@ async function scan() {
   const ids = new Set(index.levels.map((l) => l.id));
   const list = await getJson(`/jobs?limit=200&q=${encodeURIComponent(MARKER)}`);
   const jobs = (list.jobs || []).filter((j) => String(j.objective || "").startsWith(MARKER) && !listed.has(j.id) && !done[j.id]);
-  if (!jobs.length) { console.log("No new orders."); return; }
+  if (!jobs.length) { console.log("No new orders.\n\nNothing new since the last scan."); return; }
   prepareRepo();
+  const fresh = {};
   for (const j of jobs) {
     const dir = join(WORK, j.id);
     mkdirSync(dir, { recursive: true });
@@ -166,13 +168,18 @@ async function scan() {
       }
     } catch (e) { report.problems.push(String(e.message || e).split("\n")[0]); }
     if (!report.status) report.status = report.problems.length ? "rejected" : "ready";
+    const before = readJson(join(dir, "report.json"), null);
+    report.isNew = report.status !== "waiting" && (!before || before.status !== report.status);
     writeJson(join(dir, "report.json"), report);
     printReport(report);
+    if (report.isNew) fresh[report.status] = (fresh[report.status] || 0) + 1;
   }
+  const n = Object.entries(fresh).map(([k, v]) => `${v} ${k}`).join(", ");
+  console.log(`\n${n ? `NEW SINCE LAST SCAN: ${n}` : "Nothing new since the last scan."}`);
 }
 
 function printReport(r) {
-  console.log(`\n${r.status.toUpperCase()}  ${r.job}  ${r.explorer}`);
+  console.log(`\n${r.isNew ? "NEW " : ""}${r.status.toUpperCase()}  ${r.job}  ${r.explorer}`);
   if (r.order) {
     console.log(`  theme:  ${JSON.stringify(r.order.theme)}`);
     console.log(`  weapon: ${JSON.stringify(r.order.weapon)}   snacks ${r.order.snacks}, faster ${r.order.faster}%   file levels/${r.order.id}.js`);
