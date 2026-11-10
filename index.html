@@ -153,6 +153,8 @@ h1{font-family:var(--display);font-weight:700;font-size:clamp(54px,12.5vw,190px)
 .card:hover{filter:none}
 .card:focus-visible{outline:2px solid var(--bone);outline-offset:3px}
 .card.slot .art{display:grid;place-items:center;border:1.5px dashed #5a554a;background:none;color:#a9a394;font-family:var(--display);font-size:19px;text-align:center;line-height:1.15;padding:12px}
+.card.far{opacity:0;pointer-events:none}
+.card{transition-property:transform,border-color,filter,opacity}
 @media (prefers-reduced-motion:reduce){.card{transition:none}}
 .tcol{position:relative}
 .cord{position:absolute;right:clamp(12px,7%,90px);top:calc(-1*clamp(18px,4.5vh,48px));width:150px;display:flex;flex-direction:column;align-items:center;background:none;border:0;padding:0 0 8px;
@@ -307,6 +309,10 @@ const ZMAX=1.4, KK=1, ZMIN=0.09;
 const CAP=60, RITUAL=4.0, GROW=14, BABY=0.4, RELOAD=0.34, RELOAD_AUTO=0.1;
 const LEVELS={1:{start:14,speed:1,theme:'boiler',name:'Sub-basement B3',cue:'Clear the floor'},2:{start:18,speed:1.12,theme:'xmas',name:'Rec room, December 1986',cue:'Clear the rec room'}};
 let LEVEL=1, LV=LEVELS[1], START=LV.start;
+/* the built-in rifle; a swarm level may bring its own weapon (LEVELS.md, "Weapon") */
+const BASE_WEAPON=Object.freeze({name:'Bolt-action scope',reload:RELOAD,auto:false,pellets:1,spread:0,radius:1,recoil:1,sound:'shot',reticle:'cross',tint:'#ff4a33'});
+let WP=BASE_WEAPON;
+const rate=()=>WP.auto?WP.reload:auto?Math.min(WP.reload,RELOAD_AUTO):WP.reload;
 const BULB={x:-0.45,z:0.5}, DRIP={x:0.5,z:0.6};
 const FURS=[
  {top:'#e8ad63',mid:'#cf8a3f',low:'#95591f',belly:'#f7e8cc'},
@@ -386,10 +392,10 @@ const PIPE=['#2d3a3b','#a6bdbb','#5d7475','#19201f'], RUST=['#3a2416','#c07d48',
 function poly(c,pts){c.beginPath();c.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)c.lineTo(pts[i][0],pts[i][1]);c.closePath();}
 
 function paintBG(){
-  const c=bgx, r=mulberry(LEVEL===1?11:29); c.setTransform(DPR,0,0,DPR,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over';
+  const c=bgx, r=mulberry(LV.seed||(LEVEL===1?11:29)); c.setTransform(DPR,0,0,DPR,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over';
   c.fillStyle='#000'; c.fillRect(0,0,W,H);
   G.lights=[]; G.glows=[]; G.fire=null;
-  if(LV.theme==='xmas')paintXmas(c,r); else paintBoiler(c,r);
+  if(LV.swarm)paintSwarmRoom(c,r); else if(LV.theme==='xmas')paintXmas(c,r); else paintBoiler(c,r);
   c.globalCompositeOperation='overlay'; c.globalAlpha=.22; c.fillStyle=c.createPattern(noiseC,'repeat'); c.fillRect(0,0,W,H);
   c.globalCompositeOperation='source-over'; c.globalAlpha=1;
 }
@@ -1067,13 +1073,17 @@ function drawScope(){
   if(flash>0){ctx.fillStyle=`rgba(255,235,200,${flash*.22})`;ctx.fillRect(x-R,y-R,R*2,R*2);}
   let g=ctx.createRadialGradient(x,y,R*.5,x,y,R); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(.82,'rgba(0,0,0,.3)'); g.addColorStop(1,'rgba(0,0,0,.95)'); ctx.fillStyle=g; ctx.fillRect(x-R,y-R,R*2,R*2);
   /* reticle */
-  ctx.strokeStyle='rgba(6,6,6,.92)'; ctx.lineCap='butt';
-  ctx.lineWidth=1; ctx.beginPath();
-  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ ctx.moveTo(x+dx*R*.05,y+dy*R*.05); ctx.lineTo(x+dx*R*(dy<0?1:.46),y+dy*R*(dy<0?1:.46)); }
-  for(const f of [.14,.24,.34]){ ctx.moveTo(x+R*f,y-3);ctx.lineTo(x+R*f,y+3);ctx.moveTo(x-R*f,y-3);ctx.lineTo(x-R*f,y+3);ctx.moveTo(x-3,y+R*f);ctx.lineTo(x+3,y+R*f);ctx.moveTo(x-3,y-R*f);ctx.lineTo(x+3,y-R*f); }
-  ctx.stroke();
+  ctx.strokeStyle='rgba(6,6,6,.92)'; ctx.lineCap='butt'; const rt=WP.reticle;
+  if(rt==='cross'){
+    ctx.lineWidth=1; ctx.beginPath();
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ ctx.moveTo(x+dx*R*.05,y+dy*R*.05); ctx.lineTo(x+dx*R*(dy<0?1:.46),y+dy*R*(dy<0?1:.46)); }
+    for(const f of [.14,.24,.34]){ ctx.moveTo(x+R*f,y-3);ctx.lineTo(x+R*f,y+3);ctx.moveTo(x-R*f,y-3);ctx.lineTo(x-R*f,y+3);ctx.moveTo(x-3,y+R*f);ctx.lineTo(x+3,y+R*f);ctx.moveTo(x-3,y-R*f);ctx.lineTo(x+3,y-R*f); }
+    ctx.stroke();
+  } else if(rt==='ring'){ ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,y,R*.28,0,TAU); ctx.moveTo(x+R*.14,y); ctx.arc(x,y,R*.14,0,TAU); ctx.stroke(); }
+  else if(rt==='chevron'){ ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x-R*.12,y+R*.14); ctx.lineTo(x,y+R*.03); ctx.lineTo(x+R*.12,y+R*.14); ctx.stroke(); }
+  if(WP.spread>0){ ctx.setLineDash([3,5]); ctx.lineWidth=1; ctx.strokeStyle='rgba(6,6,6,.6)'; ctx.beginPath(); ctx.arc(x,y,WP.spread,0,TAU); ctx.stroke(); ctx.setLineDash([]); ctx.strokeStyle='rgba(6,6,6,.92)'; }
   ctx.lineWidth=Math.max(3,R*.028); ctx.beginPath(); ctx.moveTo(x+R*.46,y);ctx.lineTo(x+R,y);ctx.moveTo(x-R*.46,y);ctx.lineTo(x-R,y);ctx.moveTo(x,y+R*.46);ctx.lineTo(x,y+R);ctx.stroke();
-  ctx.shadowColor='#ff4a33'; ctx.shadowBlur=8; ctx.fillStyle='#ff4a33'; ctx.beginPath(); ctx.arc(x,y,1.9,0,TAU); ctx.fill(); ctx.shadowBlur=0;
+  ctx.shadowColor=WP.tint; ctx.shadowBlur=8; ctx.fillStyle=WP.tint; ctx.beginPath(); ctx.arc(x,y,rt==='dot'?3:1.9,0,TAU); ctx.fill(); ctx.shadowBlur=0;
   /* glare */
   g=ctx.createLinearGradient(x-R,y-R,x+R*.2,y+R*.2); g.addColorStop(0,'rgba(190,225,255,.13)'); g.addColorStop(.45,'rgba(190,225,255,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,R,PI*.95,PI*1.6); ctx.arc(x+R*.25,y+R*.25,R*1.05,PI*1.5,PI*1.05,true); ctx.fill();
   ctx.restore();
@@ -1084,7 +1094,7 @@ function drawScope(){
   ctx.strokeStyle=g; ctx.lineWidth=lw; ctx.beginPath(); ctx.arc(x,y,R+lw/2-1,0,TAU); ctx.stroke();
   ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x,y,R+lw-1.5,PI,PI*1.6); ctx.stroke();
   ctx.strokeStyle='rgba(0,0,0,.9)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,R,0,TAU); ctx.stroke();
-  if(cool>0){ ctx.strokeStyle='rgba(255,74,51,.9)'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(x,y,R+lw*.5,-PI/2,-PI/2+TAU*(1-cool/(auto?RELOAD_AUTO:RELOAD))); ctx.stroke(); }
+  if(cool>0){ ctx.strokeStyle=WP.tint; ctx.globalAlpha=k*.9; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(x,y,R+lw*.5,-PI/2,-PI/2+TAU*(1-cool/rate())); ctx.stroke(); }
   ctx.restore();
 }
 
@@ -1102,12 +1112,17 @@ function render(){
 /* ---------- shooting ---------- */
 function fire(){
   if(state!=='play'||cool>0||scopeIn<.85)return;
-  cool=auto?RELOAD_AUTO:RELOAD; shots++;
-  const ax=aim.x+rec.x, ay=aim.y+rec.y;
-  if(auto){sfx.autoShot();flash=.7;if(!reduce)shake=2.5;rec.vy-=210;rec.vx+=rand(-90,90);bulbVel+=rand(-1,1)*.15;}
-  else{sfx.shot();flash=1;if(!reduce)shake=5;rec.vy-=560;rec.vx+=rand(-140,140);bulbVel+=rand(-1,1)*.5;strVel+=rand(-1,1)*2;}
-  let hit=null; const order=hams.slice().sort((a,b)=>a.z-b.z);
-  for(const h of order){ const p=proj(h.x,h.z),u=G.unit*p.s*h.size, cx=p.x, cy=p.y-.42*u-(h.hop||0)*.16*u, rx=.44*u+4, ry=.47*u+4, dx=(ax-cx)/rx, dy=(ay-cy)/ry; if(dx*dx+dy*dy<=1){hit=h;break;} }
+  cool=rate(); shots++;
+  const light=auto||WP.sound==='auto', k=WP.recoil;
+  if(light){sfx.autoShot();flash=.7;if(!reduce)shake=2.5*k;rec.vy-=210*k;rec.vx+=rand(-90,90)*k;bulbVel+=rand(-1,1)*.15;}
+  else{sfx.shot();flash=1;if(!reduce)shake=5*k;rec.vy-=560*k;rec.vx+=rand(-140,140)*k;bulbVel+=rand(-1,1)*.5;strVel+=rand(-1,1)*2;}
+  /* every pellet is one shot of the original rifle, spread around the aim point */
+  for(let i=0;i<WP.pellets;i++){ const a=rand(0,TAU), d=i?WP.spread*Math.sqrt(Math.random()):0; shoot(aim.x+rec.x+Math.cos(a)*d, aim.y+rec.y+Math.sin(a)*d); }
+  if(decals.length>48)decals.splice(0,decals.length-48);
+}
+function shoot(ax,ay){
+  let hit=null; const order=hams.slice().sort((a,b)=>a.z-b.z), wr=WP.radius;
+  for(const h of order){ const p=proj(h.x,h.z),u=G.unit*p.s*h.size, cx=p.x, cy=p.y-.42*u-(h.hop||0)*.16*u, rx=(.44*u+4)*wr, ry=(.47*u+4)*wr, dx=(ax-cx)/rx, dy=(ay-cy)/ry; if(dx*dx+dy*dy<=1){hit=h;break;} }
   if(hit){
     hit.gone=true; hams.splice(hams.indexOf(hit),1); kills++; hits++;
     const r=rituals.find(q=>q.a===hit||q.b===hit); if(r)cancelRitual(r,hit.x,hit.z);
@@ -1125,7 +1140,6 @@ function fire(){
     if(f&&f.z<=ZMAX){ decals.push({x:f.x,z:f.z}); dust(ax,ay,7,f.s); for(let i=0;i<5;i++)parts.push({type:'spark',x:ax,y:ay,vx:rand(-260,260),vy:-rand(80,380),g:900,life:0,max:rand(.12,.3)}); panicNear(f.x,f.z,.3,1.1); }
     else { decals.push({wall:1,fx:ax/W,fy:ay/H,cr:[rand(0,TAU),rand(0,TAU),rand(0,TAU)]}); dust(ax,ay,6,.7); for(let i=0;i<6;i++)parts.push({type:'spark',x:ax,y:ay,vx:rand(-240,240),vy:rand(-240,200),g:700,life:0,max:rand(.12,.3)}); }
   }
-  if(decals.length>48)decals.shift();
 }
 
 /* ---------- loop ---------- */
@@ -1139,7 +1153,7 @@ function update(dt){
   updateBfly(dt); if(auto&&holding&&state==='play')fire();
   const e=1-Math.exp(-dt*24); aim.x+=(mouse.x-aim.x)*e; aim.y+=(mouse.y-aim.y)*e;
   rec.vx+=(-320*rec.x-26*rec.vx)*dt; rec.vy+=(-320*rec.y-26*rec.vy)*dt; rec.x+=rec.vx*dt; rec.y+=rec.vy*dt;
-  if(state==='intro'&&T>=playAt){ state='play'; playT=0; $('hud').hidden=false; $('mute').hidden=false; showCue(LV.cue,'They pair up. Every pair makes three more.'); bflyT=rand(5,8); }
+  if(state==='intro'&&T>=playAt){ state='play'; playT=0; $('hud').hidden=false; $('mute').hidden=false; showCue(LV.cue,WP===BASE_WEAPON?'They pair up. Every pair makes three more.':WP.name+'. They pair up. Every pair makes three more.'); bflyT=rand(5,8); }
   if(state==='play'){
     scopeIn=Math.min(1,scopeIn+dt*2.6); playT+=dt; peak=Math.max(peak,hams.length);
     if(hams.length===0)finish(true); else if(hams.length>=CAP)finish(false);
@@ -1218,7 +1232,7 @@ function reset(quick,level){
   if(level&&level!==LEVEL){LEVEL=level;LV=LEVELS[level];START=LV.start;paintBG();}
   fast=quick; T=0; playT=0; playAt=1e9; endAt=0; state='intro';
   hams=[]; rituals=[]; parts=[]; corpses=[]; decals=[]; ripples=[]; kills=shots=births=hits=0; peak=START; hudN=-1;
-  auto=false; holding=false; bfly=null; bflyT=6; $('auto').hidden=true;
+  WP=LV.weapon||BASE_WEAPON; auto=WP.auto; holding=false; bfly=null; bflyT=6; $('auto').hidden=!auto;
   for(let i=0;i<START;i++){ const z=rand(.14,ZMAX-.14); hams.push(newHam(rand(-1,1)*xlim(z)*.92,z,1)); }
   drop={phase:'wait',t:quick?.5:5.3,form:quick?1.1:4.2,fall:quick?1.2:1.7,first:true,vis:0,sy:0};
   bulbI=0; Lr=0; after=0; fl.t=0; fl.v=0; dip=0; dipT=rand(6,12); scopeIn=0; cool=0; flash=0; shake=0; rec.x=rec.y=rec.vx=rec.vy=0;
@@ -1233,13 +1247,15 @@ function frame(now){
 
 /* ---------- commission a level ----------
    fee      what the player's IMD agent pays the swarm
-   linkBase the public address of this page; leave empty to use wherever the page is served from */
-const SWARM={fee:'0.5',linkBase:'https://feed-squeek.sites.imd.fun/'};
+   linkBase the public address of this page; leave empty to use wherever the page is served from
+   The link opens agent.md, which tells the player's IMD agent how to order the level as an IMD job paid from the
+   player's own wallet. The paid job is the order, so no payment has to be matched to it. */
+const SWARM={fee:'0.5',linkBase:'https://feed-squeek.imd.site/'};
 function agentLink(){
   let base=SWARM.linkBase;
   if(!base){ try{ base=location.href.split(/[?#]/)[0]; }catch(e){ base=''; } }
   const q=new URLSearchParams({imd_job:'feed-squeek-level',fee_imd:SWARM.fee,theme:$('oTheme').value.trim(),snacks:$('oHam').value,faster_pct:$('oSpd').value,weapon:$('oWeapon').value.trim()});
-  return base+'?'+q.toString();
+  return base+'agent.md?'+q.toString();
 }
 function openOrder(){ $('orderModalSlot').appendChild($('order')); $('orderModal').hidden=false; $('oTheme').focus({preventScroll:true}); }
 function closeOrder(){ if($('orderModal').hidden)return; $('orderSlot').appendChild($('order')); $('orderModal').hidden=true; }
@@ -1248,7 +1264,7 @@ $('oSpd').addEventListener('input',e=>{$('oSpdV').textContent=e.target.value+'%'
 $('linkGen').addEventListener('click',()=>{
   if(!$('oTheme').value.trim()){ $('orderStatus').textContent='Add a theme first, then generate the link.'; $('oTheme').focus({preventScroll:true}); return; }
   $('linkField').value=agentLink(); $('linkOut').hidden=false; $('linkField').select();
-  $('orderStatus').textContent=`Give this link to your IMD swarm agent. It sends your order to the swarm and pays the ${SWARM.fee} IMD fee.`; });
+  $('orderStatus').textContent=`Give this link to your IMD agent. It orders the level from the swarm and pays the ${SWARM.fee} IMD fee from your wallet. New levels appear here within a day.`; });
 $('linkCopy').addEventListener('click',async()=>{ const f=$('linkField');
   try{ await navigator.clipboard.writeText(f.value); $('orderStatus').textContent='Link copied. Hand it to your IMD swarm agent.'; }
   catch(e){ f.select(); $('orderStatus').textContent='Copy was blocked. The link is selected, so copy it by hand.'; } });
@@ -1319,14 +1335,18 @@ function homeTick(dt){
 }
 
 /* ---------- level gallery ----------
-   The swarm adds a level by adding an entry here (and its room to LEVELS). */
+   The built-in levels and the open slot. Swarm levels are added before the slot by loadSwarmLevels(). */
 const GALLERY=[
   {level:1,name:'Sub-basement B3',tag:'Original',hamsters:14,faster:'+0%'},
   {level:2,name:'Rec room, 1986',tag:'Holiday',hamsters:18,faster:'+12%'},
   {slot:true,name:'Your level here',tag:'Open slot'}
 ];
 let selIdx=0, selLevel=1;
-function layoutFan(){ GALLERY.forEach((g,i)=>{ const off=i-selIdx, a=Math.abs(off); g.el.style.transform=`translateX(${(i-(GALLERY.length-1)/2)*158}px) translateY(${a*14}px) rotate(${off*4}deg) scale(${1-a*.06})`; g.el.style.zIndex=10-a; g.el.classList.toggle('sel',off===0); g.el.setAttribute('aria-pressed',String(off===0)); }); }
+/* Up to five cards fan out around the middle; with more, the fan follows the selected card and hides the far ones. */
+function layoutFan(){ const N=GALLERY.length, mid=N<=5?(N-1)/2:clamp(selIdx,2,N-3);
+  GALLERY.forEach((g,i)=>{ const off=i-selIdx, a=Math.abs(off), far=Math.abs(i-mid)>2.5;
+    g.el.style.transform=`translateX(${(i-mid)*158}px) translateY(${a*14}px) rotate(${off*4}deg) scale(${1-Math.min(a,4)*.06})`; g.el.style.zIndex=10-a;
+    g.el.classList.toggle('far',far); g.el.tabIndex=far?-1:0; g.el.classList.toggle('sel',off===0); g.el.setAttribute('aria-pressed',String(off===0)); }); }
 function buildGallery(){
   const fan=$('fan'); fan.replaceChildren();
   const mkE=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;};
@@ -1344,21 +1364,125 @@ function buildGallery(){
   });
   $('gSwarm').textContent=GALLERY.filter(g=>g.swarm).length; layoutFan();
 }
+/* A card's picture: the room with a few snacks, cut to a square. src is the room at W x H, any resolution. */
+function drawThumb(g,src){
+  const c=sx; c.setTransform(DPR,0,0,DPR,0,0); c.globalCompositeOperation='source-over'; c.globalAlpha=1; c.drawImage(src,0,0,W,H);
+  const r=mulberry(g.level*5+3), hs=[];
+  for(let i=0;i<9;i++){ const z=.3+r()*.85, h=newHam((r()*2-1)*.42,z,1,null,KIND_NAMES[(i*3+g.level)%KIND_NAMES.length]); h.face=r()<.5?1:-1; h.dir=h.face>0?0:PI; h.age=0; h.phase=0; hs.push(h); }
+  hs.sort((a,b)=>b.z-a.z); for(const h of hs)drawCritter(c,h);
+  const side=Math.min(W,H)*DPR*.9, t=g.cv.getContext('2d'), n=g.cv.width;
+  t.drawImage(scene,(W*DPR-side)/2,(H*DPR-side)*.42,side,side,0,0,n,n);
+  const v=t.createRadialGradient(n*.42,n*.3,n*.1,n/2,n/2,n*.8); v.addColorStop(0,'rgba(255,190,110,.16)'); v.addColorStop(.55,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,.6)'); t.fillStyle=v; t.fillRect(0,0,n,n);
+}
+function oneThumb(g){ const keep=LEVEL; LEVEL=g.level; LV=LEVELS[LEVEL]; paintBG(); drawThumb(g,bg); LEVEL=keep; LV=LEVELS[keep]; }
+/* A swarm card asks the worker for a small picture; until it comes the card stays dark. */
+function swarmThumb(g){
+  const cv=g.cv; if(g.thumbFor===cv||g.thumbAsk===cv)return;
+  g.thumbAsk=cv;
+  swarmPaint(g.level,clamp(380/(Math.min(W,H)*.9),.2,DPR),false,bm=>{
+    if(g.thumbAsk===cv)g.thumbAsk=null;
+    if(g.cv!==cv){ if(bm)bm.close(); return; }
+    if(bm){ drawThumb(g,bm); bm.close(); g.thumbFor=cv; }
+    else { oneThumb(g); paintBG(); g.thumbFor=cv; }
+  });
+}
 function makeThumbs(){
-  const keep=LEVEL, c=sx;
+  const keep=LEVEL;
   for(const g of GALLERY){ if(!g.cv||!LEVELS[g.level])continue;
-    LEVEL=g.level; LV=LEVELS[LEVEL]; paintBG();
-    c.setTransform(DPR,0,0,DPR,0,0); c.globalCompositeOperation='source-over'; c.globalAlpha=1; c.drawImage(bg,0,0,W,H);
-    const r=mulberry(g.level*5+3), hs=[];
-    for(let i=0;i<9;i++){ const z=.3+r()*.85, h=newHam((r()*2-1)*.42,z,1,null,KIND_NAMES[(i*3+g.level)%KIND_NAMES.length]); h.face=r()<.5?1:-1; h.dir=h.face>0?0:PI; h.age=0; h.phase=0; hs.push(h); }
-    hs.sort((a,b)=>b.z-a.z); for(const h of hs)drawCritter(c,h);
-    const side=Math.min(W,H)*DPR*.9, t=g.cv.getContext('2d'), n=g.cv.width;
-    t.drawImage(scene,(W*DPR-side)/2,(H*DPR-side)*.42,side,side,0,0,n,n);
-    const v=t.createRadialGradient(n*.42,n*.3,n*.1,n/2,n/2,n*.8); v.addColorStop(0,'rgba(255,190,110,.16)'); v.addColorStop(.55,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,.6)'); t.fillStyle=v; t.fillRect(0,0,n,n);
+    const L=LEVELS[g.level];
+    if(L.swarm&&!L.broken&&!PAINT.off){ swarmThumb(g); continue; }
+    LEVEL=g.level; LV=L; paintBG(); drawThumb(g,bg);
   }
   LEVEL=keep; LV=LEVELS[keep]; START=LV.start; paintBG();
 }
-makeNoise(); resize(); buildGallery(); makeThumbs(); homeInit();
+/* ---------- swarm levels ----------
+   The swarm builds each level as one file, levels/<id>.js (LEVELS.md). Once a level passes tools/validate-level.mjs and
+   review, tools/ingest.mjs lists it in levels/index.json with the data this page needs: name, cue, snacks, speed and
+   weapon. The page reads only that list. The room painter in the level file runs in painter.js, a Web Worker that draws
+   on its own canvas and sends back a picture, so a broken or hostile painter can neither stop nor reach the game. A
+   painter that fails or takes longer than PAINT_MS is marked broken, and its level falls back to the boiler room. */
+const SWARM_IDS=new Set(), PAINT_MS=6000;
+const RGB=/^\d{1,3},\d{1,3},\d{1,3}$/, fin=(...v)=>v.every(n=>typeof n==='number'&&isFinite(n));
+const PAINT={w:null,q:[],busy:null,n:0,off:typeof Worker!=='function'||typeof OffscreenCanvas!=='function'};
+let swarmBG=null, swarmWait=false;
+const bgKey=()=>LEVEL+':'+W+'x'+H+'@'+DPR;
+function swarmPaint(level,dpr,first,cb){
+  const L=LEVELS[level]; if(PAINT.off||!L||L.broken){ cb(null); return; }
+  const job={level,dpr,cb}; if(first)PAINT.q.unshift(job); else PAINT.q.push(job); pumpPaint();
+}
+function pumpPaint(){
+  if(PAINT.busy||!PAINT.q.length)return;
+  const job=PAINT.busy=PAINT.q.shift(), L=LEVELS[job.level];
+  if(!PAINT.w){
+    try{ PAINT.w=new Worker('painter.js'); PAINT.w.onmessage=painted;
+      PAINT.w.onerror=e=>{ e.preventDefault(); PAINT.off=true; stopWorker(); donePaint(null,null,false); }; }
+    catch(e){ PAINT.off=true; donePaint(null,null,false); return; }
+  }
+  job.n=++PAINT.n; job.key=job.level+':'+W+'x'+H+'@'+job.dpr;
+  job.timer=setTimeout(()=>{ stopWorker(); donePaint(null,null,true); },PAINT_MS);
+  PAINT.w.postMessage({n:job.n,id:L.id,W,H,dpr:job.dpr,seed:L.seed,
+    G:{cx:G.cx,hw:G.hw,sFar:G.sFar,yFN:G.yFN,yFF:G.yFF,yCN:G.yCN,yCF:G.yCF,unit:G.unit,fy:G.fy},
+    K:{KK,ZMAX,DRIP,BULB,PIPE,RUST,IRON,LCOL}});
+}
+function stopWorker(){ if(PAINT.w){ PAINT.w.terminate(); PAINT.w=null; } }
+function painted(e){
+  const d=e.data, job=PAINT.busy; if(!job||!d||d.n!==job.n)return;
+  if(d.unsupported){ PAINT.off=true; stopWorker(); donePaint(null,null,false); return; }
+  donePaint(typeof ImageBitmap==='function'&&d.bm instanceof ImageBitmap?d.bm:null, d.g, !d.bm);
+}
+function donePaint(bm,g,broken){
+  const job=PAINT.busy; PAINT.busy=null;
+  if(!job){ if(bm)bm.close(); return; }
+  clearTimeout(job.timer);
+  if(broken&&LEVELS[job.level])LEVELS[job.level].broken=true;
+  try{ job.cb(bm,g,job); }catch(e){ if(bm)bm.close(); }
+  if(PAINT.off)for(const j of PAINT.q.splice(0)){ try{ j.cb(null); }catch(e){} }
+  pumpPaint();
+}
+/* paintBG() for a swarm level: the worker's picture when it is ready, a dark room while it paints */
+function paintSwarmRoom(c,r){
+  const z=DRIP.z, pr=G.hw*.03*sc(z); G.dripX=proj(DRIP.x,z).x; G.dripY=ceilY(z)+pr*3.56; G.pr=pr;
+  if(swarmBG&&swarmBG.key===bgKey()){ c.drawImage(swarmBG.bm,0,0,W,H); useSwarmG(swarmBG.g); return; }
+  if(LV.broken||PAINT.off){ paintBoiler(c,r); return; }
+  if(swarmWait)return;
+  swarmWait=true;
+  swarmPaint(LEVEL,DPR,true,(bm,g,job)=>{
+    swarmWait=false;
+    if(bm&&job.key===bgKey()){ if(swarmBG)swarmBG.bm.close(); swarmBG={key:job.key,bm,g}; } else if(bm)bm.close();
+    if(LV.swarm)paintBG();
+  });
+}
+function useSwarmG(g){
+  if(!g)return;
+  if(fin(g.dripX,g.dripY,g.pr)&&g.pr>0){ G.dripX=g.dripX; G.dripY=g.dripY; G.pr=g.pr; }
+  G.lights=(Array.isArray(g.lights)?g.lights:[]).filter(l=>l&&fin(l.x,l.y,l.r,l.sp,l.ph)&&RGB.test(l.col)).slice(0,120).map(l=>({x:l.x,y:l.y,r:l.r,col:l.col,sp:l.sp,ph:l.ph}));
+  G.glows=(Array.isArray(g.glows)?g.glows:[]).filter(q=>q&&fin(q.x,q.y,q.r,q.a)&&RGB.test(q.col)).slice(0,24).map(q=>({x:q.x,y:q.y,r:q.r,col:q.col,a:q.a,fl:q.fl?1:0}));
+  const f=g.fire; G.fire=f&&fin(f.x,f.y,f.w,f.h)?{x:f.x,y:f.y,w:f.w,h:f.h}:null;
+}
+function weaponFrom(w){
+  if(!w||typeof w!=='object')return BASE_WEAPON;
+  const n=(v,a,b,d)=>typeof v==='number'&&isFinite(v)?Math.min(b,Math.max(a,v)):d;
+  return Object.freeze({name:typeof w.name==='string'&&w.name.trim()?w.name.trim().slice(0,40):'Custom weapon',reload:n(w.reload,.06,1.2,RELOAD),auto:w.auto===true,pellets:Math.round(n(w.pellets,1,8,1)),
+    spread:n(w.spread,0,80,0),radius:n(w.radius,.5,2.5,1),recoil:n(w.recoil,0,2,1),sound:w.sound==='auto'?'auto':'shot',
+    reticle:['cross','dot','ring','chevron'].includes(w.reticle)?w.reticle:'cross',tint:/^#[0-9a-fA-F]{6}$/.test(w.tint||'')?w.tint:'#ff4a33'});
+}
+const seedOf=id=>{ let h=2166136261; for(const ch of id)h=Math.imul(h^ch.charCodeAt(0),16777619); return (h>>>0)||1; };
+const label=(v,d)=>typeof v==='string'&&v.trim()?v.trim().slice(0,40):d;
+function addSwarmLevel(d){
+  if(!d||typeof d!=='object'||!/^[a-z0-9-]{3,48}$/.test(d.id||'')||SWARM_IDS.has(d.id))return false;
+  const n=Math.max(...Object.keys(LEVELS).map(Number))+1, start=Math.round(clamp(+d.start||14,8,40)), speed=clamp(+d.speed||1,1,2);
+  LEVELS[n]={id:d.id,swarm:true,start,speed,theme:'swarm',name:label(d.name,d.id),cue:label(d.cue,'Clear the floor'),weapon:weaponFrom(d.weapon),seed:seedOf(d.id)};
+  SWARM_IDS.add(d.id);
+  GALLERY.splice(GALLERY.length-1,0,{level:n,name:LEVELS[n].name,tag:'Swarm',hamsters:start,faster:'+'+Math.round((speed-1)*100)+'%',swarm:true});
+  return true;
+}
+async function loadSwarmLevels(){
+  let list=[];
+  try{ const r=await fetch('levels/index.json',{cache:'no-cache'}); if(r.ok){ const j=await r.json(); if(j&&Array.isArray(j.levels))list=j.levels; } }catch(e){}
+  let added=0; for(const d of list.slice(0,60))if(addSwarmLevel(d))added++;
+  if(added){ buildGallery(); if(state==='title')makeThumbs(); }
+}
+makeNoise(); resize(); buildGallery(); makeThumbs(); homeInit(); loadSwarmLevels();
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{ if(state==='title')makeThumbs(); else paintBG(); });
 requestAnimationFrame(frame);
 })();
