@@ -1,0 +1,31 @@
+{
+  "levels": [
+    {
+      "id": "football-stadium-4f5d",
+      "name": "Football stadium",
+      "cue": "Clear the pitch",
+      "start": 30,
+      "speed": 1.2,
+      "weapon": {
+        "name": "Football",
+        "reload": 0.7,
+        "auto": false,
+        "pellets": 1,
+        "spread": 0,
+        "radius": 1.8,
+        "recoil": 0.6,
+        "sound": "shot",
+        "reticle": "ring",
+        "tint": "#ffffff"
+      },
+      "order": {
+        "job": "c12a2aba-1106-477f-985a-a2c0bb1a9465",
+        "theme": "football stadium",
+        "weapon": "football",
+        "snacks": 30,
+        "faster": 20
+      },
+      "added": "2026-11-10"
+    }
+  ]
+}
